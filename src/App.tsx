@@ -80,7 +80,7 @@ function App() {
       const data = await res.json()
 
       if (!res.ok) {
-        setScanError(data.error || 'Failed to scan receipt')
+        setScanError(data.error + (data.details ? ': ' + data.details : ''))
         return
       }
 
