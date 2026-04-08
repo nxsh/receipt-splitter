@@ -8,6 +8,52 @@
   margin-bottom: 28px;
 }
 
+.scan-section {
+  text-align: center;
+}
+
+.scan-btn {
+  width: 100%;
+  padding: 16px;
+  font-size: 18px;
+  font-weight: 600;
+  border-radius: 12px;
+  background: linear-gradient(135deg, var(--accent), #7c3aed);
+  border: none;
+  color: #fff;
+  cursor: pointer;
+}
+
+.scan-btn:disabled {
+  opacity: 0.6;
+  cursor: wait;
+}
+
+.scan-btn:hover:not(:disabled) {
+  opacity: 0.9;
+}
+
+.error {
+  color: #e53e3e;
+  margin-top: 8px;
+  font-size: 14px;
+}
+
+.preview {
+  margin-top: 12px;
+  border-radius: 8px;
+  overflow: hidden;
+  border: 1px solid var(--border);
+}
+
+.preview img {
+  width: 100%;
+  max-height: 300px;
+  object-fit: contain;
+  display: block;
+  background: var(--code-bg);
+}
+
 .input-row {
   display: flex;
   gap: 8px;
@@ -112,6 +158,22 @@ button:hover {
   accent-color: var(--accent);
 }
 
+.action-cell {
+  display: flex;
+  gap: 4px;
+  align-items: center;
+}
+
+.btn-all {
+  background: var(--accent-bg);
+  color: var(--accent);
+  font-size: 11px;
+  padding: 2px 6px;
+  border-radius: 4px;
+  font-weight: 600;
+  text-transform: uppercase;
+}
+
 .btn-remove {
   background: none;
   border: none;
@@ -123,6 +185,25 @@ button:hover {
 
 .btn-remove:hover {
   color: #e53e3e;
+}
+
+.extras-row {
+  display: flex;
+  gap: 16px;
+  margin-top: 16px;
+  flex-wrap: wrap;
+}
+
+.extras-row label {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-weight: 500;
+  color: var(--text-h);
+}
+
+.extras-row input {
+  width: 80px;
 }
 
 .summary {
@@ -147,6 +228,11 @@ button:hover {
   font-weight: 700;
   font-size: 18px;
   color: var(--text-h);
+}
+
+.summary-line.unassigned {
+  color: #e53e3e;
+  font-style: italic;
 }
 
 .summary hr {

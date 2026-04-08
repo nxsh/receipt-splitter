@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useRef } from 'react'
 import './App.css'
 
 interface Person {
@@ -14,16 +14,15 @@ interface Item {
 }
 
 function App() {
-  const [people, setPeople] = useState<Person[]>([
-    { id: 1, name: 'Person 1' },
-    { id: 2, name: 'Person 2' },
-  ])
+  const [people, setPeople] = useState<Person[]>([])
   const [items, setItems] = useState<Item[]>([])
   const [newPersonName, setNewPersonName] = useState('')
-  const [newItemName, setNewItemName] = useState('')
-  const [newItemPrice, setNewItemPrice] = useState('')
   const [tip, setTip] = useState('')
   const [tax, setTax] = useState('')
+  const [scanning, setScanning] = useState(false)
+  const [scanError, setScanError] = useState('')
+  const [previewUrl, setPreviewUrl] = useState<string | null>(null)
+  const fileInputRef = useRef<HTMLInputElement>(null)
 
   const addPerson = () => {
     if (!newPersonName.trim()) return
@@ -39,18 +38,6 @@ function App() {
     })))
   }
 
-  const addItem = () => {
-    if (!newItemName.trim() || !newItemPrice) return
-    setItems([...items, {
-      id: Date.now(),
-      name: newItemName.trim(),
-      price: newItemPrice,
-      assignedTo: []
-    }])
-    setNewItemName('')
-    setNewItemPrice('')
-  }
-
   const removeItem = (id: number) => {
     setItems(items.filter(i => i.id !== id))
   }
@@ -63,6 +50,62 @@ function App() {
         : [...item.assignedTo, personId]
       return { ...item, assignedTo: assigned }
     }))
+  }
+
+  const assignAll = (itemId: number) => {
+    setItems(items.map(item => {
+      if (item.id !== itemId) return item
+      const allAssigned = people.every(p => item.assignedTo.includes(p.id))
+      return {
+        ...item,
+        assignedTo: allAssigned ? [] : people.map(p => p.id)
+      }
+    }))
+  }
+
+  const handleScan = async (file: File) => {
+    setScanning(true)
+    setScanError('')
+    setPreviewUrl(URL.createObjectURL(file))
+
+    const formData = new FormData()
+    formData.append('receipt', file)
+
+    try {
+      const res = await fetch('/api/scan', {
+        method: 'POST',
+        body: formData,
+      })
+
+      const data = await res.json()
+
+      if (!res.ok) {
+        setScanError(data.error || 'Failed to scan receipt')
+        return
+      }
+
+      if (data.items && Array.isArray(data.items)) {
+        const scannedItems: Item[] = data.items.map((item: any, i: number) => ({
+          id: Date.now() + i,
+          name: item.name || 'Unknown item',
+          price: String(item.price || 0),
+          assignedTo: []
+        }))
+        setItems(scannedItems)
+      }
+
+      if (data.tax) setTax(String(data.tax))
+      if (data.tip) setTip(String(data.tip))
+    } catch {
+      setScanError('Failed to connect to scanning service')
+    } finally {
+      setScanning(false)
+    }
+  }
+
+  const onFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    if (file) handleScan(file)
   }
 
   const subtotal = items.reduce((sum, item) => sum + (parseFloat(item.price) || 0), 0)
@@ -84,6 +127,30 @@ function App() {
   return (
     <div className="app">
       <h1>Receipt Splitter</h1>
+
+      <section className="section scan-section">
+        <input
+          ref={fileInputRef}
+          type="file"
+          accept="image/*"
+          capture="environment"
+          onChange={onFileSelect}
+          hidden
+        />
+        <button
+          className="scan-btn"
+          onClick={() => fileInputRef.current?.click()}
+          disabled={scanning}
+        >
+          {scanning ? 'Scanning...' : 'Scan Receipt'}
+        </button>
+        {scanError && <p className="error">{scanError}</p>}
+        {previewUrl && (
+          <div className="preview">
+            <img src={previewUrl} alt="Receipt" />
+          </div>
+        )}
+      </section>
 
       <section className="section">
         <h2>People</h2>
@@ -107,28 +174,9 @@ function App() {
         </div>
       </section>
 
-      <section className="section">
-        <h2>Items</h2>
-        <div className="input-row">
-          <input
-            type="text"
-            placeholder="Item name"
-            value={newItemName}
-            onChange={e => setNewItemName(e.target.value)}
-          />
-          <input
-            type="number"
-            placeholder="Price"
-            value={newItemPrice}
-            onChange={e => setNewItemPrice(e.target.value)}
-            onKeyDown={e => e.key === 'Enter' && addItem()}
-            step="0.01"
-            min="0"
-          />
-          <button onClick={addItem}>Add</button>
-        </div>
-
-        {items.length > 0 && (
+      {items.length > 0 && (
+        <section className="section">
+          <h2>Items</h2>
           <div className="table-wrap">
             <table className="items-table">
               <thead>
@@ -153,7 +201,16 @@ function App() {
                         />
                       </td>
                     ))}
-                    <td>
+                    <td className="action-cell">
+                      {people.length > 0 && (
+                        <button
+                          className="btn-all"
+                          onClick={() => assignAll(item.id)}
+                          title="Toggle all"
+                        >
+                          all
+                        </button>
+                      )}
                       <button className="btn-remove" onClick={() => removeItem(item.id)}>&times;</button>
                     </td>
                   </tr>
@@ -161,38 +218,33 @@ function App() {
               </tbody>
             </table>
           </div>
-        )}
-      </section>
 
-      <section className="section">
-        <h2>Extras</h2>
-        <div className="input-row">
-          <label>
-            Tax
-            <input
-              type="number"
-              placeholder="0.00"
-              value={tax}
-              onChange={e => setTax(e.target.value)}
-              step="0.01"
-              min="0"
-            />
-          </label>
-          <label>
-            Tip
-            <input
-              type="number"
-              placeholder="0.00"
-              value={tip}
-              onChange={e => setTip(e.target.value)}
-              step="0.01"
-              min="0"
-            />
-          </label>
-        </div>
-      </section>
+          <div className="extras-row">
+            <label>
+              Tax: &pound;
+              <input
+                type="number"
+                value={tax}
+                onChange={e => setTax(e.target.value)}
+                step="0.01"
+                min="0"
+              />
+            </label>
+            <label>
+              Tip: &pound;
+              <input
+                type="number"
+                value={tip}
+                onChange={e => setTip(e.target.value)}
+                step="0.01"
+                min="0"
+              />
+            </label>
+          </div>
+        </section>
+      )}
 
-      {items.length > 0 && (
+      {items.length > 0 && people.length > 0 && (
         <section className="section summary">
           <h2>Summary</h2>
           <div className="summary-line">
@@ -217,12 +269,28 @@ function App() {
           </div>
           <hr />
           <h3>Each person owes:</h3>
-          {people.map(person => (
-            <div key={person.id} className="summary-line">
-              <span>{person.name}</span>
-              <span>&pound;{getPersonTotal(person.id).toFixed(2)}</span>
-            </div>
-          ))}
+          {people.map(person => {
+            const owes = getPersonTotal(person.id)
+            return (
+              <div key={person.id} className="summary-line">
+                <span>{person.name}</span>
+                <span>&pound;{owes.toFixed(2)}</span>
+              </div>
+            )
+          })}
+          {(() => {
+            const assigned = items.reduce((sum, item) => {
+              if (item.assignedTo.length > 0) return sum + (parseFloat(item.price) || 0)
+              return sum
+            }, 0)
+            const unassigned = subtotal - assigned
+            return unassigned > 0 ? (
+              <div className="summary-line unassigned">
+                <span>Unassigned</span>
+                <span>&pound;{(unassigned * multiplier).toFixed(2)}</span>
+              </div>
+            ) : null
+          })()}
         </section>
       )}
     </div>
