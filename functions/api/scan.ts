@@ -2,6 +2,24 @@ interface Env {
   ANTHROPIC_API_KEY: string
 }
 
+// A generic 502 makes every Anthropic failure look the same, which is how an
+// exhausted credit balance went unnoticed for two months across the three apps
+// sharing this key (this one, the EN->LV translator, and Dochas Times). Name the
+// causes that are specific and actionable so the reason is obvious from the
+// response alone, without anyone reading raw API output.
+function describeAnthropicFailure(status: number, body: string): string {
+  const b = body.toLowerCase()
+  if (b.includes('credit balance')) {
+    return 'ANTHROPIC CREDIT BALANCE EXHAUSTED — top up at console.anthropic.com. This key is shared with the translator and Dochas Times, so those are down too.'
+  }
+  if (status === 401 || b.includes('authentication_error')) {
+    return 'ANTHROPIC API KEY INVALID OR REVOKED — check the key in the Pages environment variables.'
+  }
+  if (status === 429) return 'ANTHROPIC RATE LIMIT — retry shortly.'
+  if (status === 529 || status === 503) return 'ANTHROPIC OVERLOADED — retry shortly.'
+  return `Anthropic API error ${status}`
+}
+
 export const onRequestPost: PagesFunction<Env> = async (context) => {
   const { request, env } = context
 
@@ -78,7 +96,11 @@ Rules:
 
     if (!response.ok) {
       const err = await response.text()
-      return Response.json({ error: 'AI service error', details: err }, { status: 502 })
+      const reason = describeAnthropicFailure(response.status, err)
+      // Logged as well as returned: the response reaches whoever is using the
+      // app, the log is what tells you why when nobody is.
+      console.error(`[scan] ${reason} | upstream ${response.status}: ${err}`)
+      return Response.json({ error: reason, details: err }, { status: 502 })
     }
 
     const result = await response.json() as any
